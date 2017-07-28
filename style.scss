@@ -1,0 +1,15 @@
+form *{
+    display:block;
+}
+output{
+    display:block;
+    outline:1px dotted tan;
+}
+textarea{
+    display:block;
+}
+//textarea:focus + output{
+//  display:none;
+    //}
+b,strong, i{display:inline}
+

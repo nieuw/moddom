@@ -113,7 +113,7 @@ module.exports = {
         "no-extra-label": "error",
         "no-extra-parens": "off",
         "no-floating-decimal": "error",
-        "no-implicit-coercion": "error",
+        "no-implicit-coercion": "off",
         "no-implicit-globals": "off",
         "no-implied-eval": "error",
         "no-inline-comments": "error",
