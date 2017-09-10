@@ -10,3 +10,10 @@ textarea {
 
 b, strong, i {
   display: inline; }
+
+  span{
+      display: inline-block;
+      width:1em;
+      height:1em;
+      background:magenta;
+  }
