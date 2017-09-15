@@ -4,6 +4,7 @@
 const wysiwyg = document.querySelector('output')
     , textarea = document.querySelector('textarea')
     , strong =  document.querySelector('[value="strong"]')
+    , italic =  document.querySelector('[value="i"]')
     , form = document.querySelector('form')
     , selection = window.getSelection();
 
@@ -29,9 +30,12 @@ document.addEventListener("selectionchange", function() {
 });
 
 strong.addEventListener("click", addRemoveTagButton);
+italic.addEventListener("click", addRemoveTagButton);
 
 function addRemoveTagButton(){
-    let range = getSelectionRange()
+
+    let time = [new Date()] 
+        , range = getSelectionRange()
         , value = this.value
         , join = true;
 
@@ -47,35 +51,120 @@ function addRemoveTagButton(){
                 , isRemove = isAllContentInsideTag(range, value);
 
             if(join){
-                if(startOffset === 0)
+                if(startOffset === 0){
                     start = getFarthestAdjacentwrappedNode(range.startContainer, value, 0)
+                    start = start || range.startContainer;
+                }
                 if(endOffset === end.length){
                     end = getFarthestAdjacentwrappedNode(range.endContainer, value, 1);
+                    end = end || range.endContainer
                     endOffset = end.length;
                 }
             }
+            time.push(new Date());
 
-            const markers = {
-                'wrapStart': getSetMarker(end, 'wrap-end', endOffset),
-                'selectionStart': getSetMarker(range.endContainer, 'selection-end', range.endOffset),
-                'selectionEnd': getSetMarker(range.startContainer, 'selection-start', range.startOffset),
-                'wrapEnd': getSetMarker(start,'wrap-start',startOffset)
-            }
+            const markers = getSetMarkers([
+                [end, 'wrap-end', endOffset],
+                [range.endContainer, 'selection-end', range.endOffset],
+                [range.startContainer, 'selection-start', range.startOffset],
+                [start,'wrap-start',startOffset]
+            ].map(function(v){return {node:v[0], name:v[1], offset:v[2]}}));
 
-            removeAllTagsOfTypeBetween(value, markers.wrapStart, markers.wrapEnd);
+            time.push(new Date());
+            removeAllTagsOfTypeBetween(value, markers['wrap-start'], markers['wrap-end']);
+            time.push(new Date());
             
             if(isRemove){ 
-                wrapContenWithTag(markers.wrapStart, markers.selectionStart)
-                wrapContenWithTag(markers.selectionEnd, markers.wrapEnd) 
+                wrapContentBetweenWithTag(value, markers['wrap-start'], markers['selection-start'])
+                wrapContentBetweenWithTag(value, markers['selection-end'], markers['wrap-end']) 
             }else 
-                wrapContenWithTag(markers.wrapStart, markers.wrapEnd) 
+                wrapContentBetweenWithTag(value, markers['wrap-start'], markers['wrap-end']) 
+
+            time.push(new Date());
+            wysiwyg.querySelectorAll('.marker').forEach(function(marker){
+                marker.parentNode.removeChild(marker)
+            })
+            
+            time.push(new Date());
         }else 
             console.log(isNodeWrapped(range.startContainer, value) ? 'break tag' : 'add tag') 
     } 
+    let now = new Date();
+    time.map(function(timeAt, i){
+        console.log(i+": -"+(now - timeAt))
+    })
+
+
 } 
 
+/**
+ * @param array[i].node node
+ * @param array[i].name name
+ * @param array[i].index index
+ */
+function getSetMarkers(array){ 
+    let markers = {}
+        , ii;
+    const toMark = array.filter(function(v, i, a){
+        const markerRef = {name:v.name, offset:v.offset}
+        let unique = true;
+        v.markers = [markerRef]
+        for(ii = 0; ii<i ;ii++){
+            if(a[ii].node === v.node){
+                a[ii].markers.push(markerRef)
+                unique = false;
+                break;
+            }
+        }
+        return unique
+    }).forEach(function(v){
+        let node = v.node, nodeMarkers = v.markers.sort(function(a, b){a > b});
+        for(let i = 0,l=nodeMarkers.length; i<l; i++){
+            let markerName = nodeMarkers[i].name, offset = nodeMarkers[i].offset;
+            const marker = document.createElement('span') 
+            marker.className = 'marker '+markerName; 
+            if(node.nodeType === 3){
+                v[0] = node.splitText(offset);
+                node.parentNode.insertBefore(marker, v[0]);
+            }else 
+                if(offset === 0) 
+                    node.parentNode.insertBefore(marker, node) 
+                else
+                    if(node === node.parentNode.lastChild) 
+                        node.parentNode.appendChild(marker)
+                    else 
+                        node.parentNode.insertBefore(marker, node.nextSibling) 
+
+                    markers[markerName] = marker;
+        }
+    })
+    
+    return markers; 
+} 
+
+function wrapContentBetweenWithTag(value, start, end){
+    let nodes = getNodesInBetween(start, end)
+        , join = []
+
+    while(nodes.length > 0){
+        let node = nodes.shift()
+        join.push(node)
+        if(nodes.length > 0 && nodes[0] === node.nextSibling)
+            continue
+        else{
+            const wrap = document.createElement(value);
+            if(node.nextSibling) 
+                node.parentNode.insertBefore(wrap, node.nextSibling)
+            else
+                node.parentNode.appendChild(wrap)
+
+            join.map(function(v){return wrap.appendChild(v)});
+        }
+    }
+}
+
 function removeAllTagsOfTypeBetween(type, start, end){ 
-    getNodesFromTo(start, end).forEach(function(node){
+    getNodesInBetween(start, end).forEach(function(node){
         if(node.nodeType === 1){ 
             node.querySelectorAll(type).forEach(function(childNode){ 
                 removeWrappingNode(childNode) 
@@ -86,22 +175,6 @@ function removeAllTagsOfTypeBetween(type, start, end){
     }) 
 } 
 
-function getSetMarker(node, markerName, offset){ 
-    const marker = document.createElement('span') 
-    marker.className = markerName; 
-    if(node.nodeType === 3) 
-        node.parentNode.insertBefore(marker, node.splitText(offset));
-    else
-        if(offset === 0) 
-            node.parentNode.insertBefore(marker, node) 
-        else
-            if(node === node.parentNode.lastChild) 
-                node.parentNode.appendChild(marker)
-            else 
-                node.parentNode.insertBefore(marker, node.nextSibling) 
-
-    return marker; 
-} 
 
 function getSelectionRange(){ 
     if(selection.rangeCount){ 
@@ -134,7 +207,7 @@ function getNextChildlessNode(node, direction){
 } 
 
 function getFarthestAdjacentwrappedNode(node, wrap, direction){ 
-    let foundNode = false 
+    let foundNode = getWrapNode(node, wrap) 
         , newFoundNode 
     
     while(node = getNextChildlessNode(node, direction)){ 
