@@ -17,3 +17,22 @@ b, strong, i {
       height:1em;
       background:magenta;
   }
+
+
+form > ol > li{
+    margin:1em 0;
+    padding:
+
+}
+form > ol > li > label[title$='tag']:before{
+    content: '<';
+}
+form > ol > li > label[title$='tag']:after{
+    content: '>';
+}
+form > ol > li > label input{
+    display:inline;
+    background:none;
+    border:0;
+    outline:0;
+}

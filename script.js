@@ -1,12 +1,16 @@
-
+/* eslint-disable */
 "use strict"
 
 const wysiwyg = document.querySelector('output')
     , textarea = document.querySelector('textarea')
     , strong =  document.querySelector('[value="strong"]')
     , italic =  document.querySelector('[value="i"]')
-    , form = document.querySelector('form')
-    , selection = window.getSelection();
+    , addCommentButton =  document.querySelector('[name="comment"]')
+    , toggleCommentButton =  document.querySelector('[value="toggle comments"]')
+    , form = document.querySelector('[name="editor"]')
+    , actionList = document.querySelector('[name="editor"] > ol')
+    , selection = window.getSelection()
+    , phrasingContent = ['abbr', 'audio', 'b', 'bdo', 'br', 'button', 'canvas', 'cite', 'code', 'command', 'data', 'datalist', 'dfn', 'em', 'embed', 'i', 'iframe', 'img', 'input', 'kbd', 'keygen', 'label', 'mark', 'math', 'meter', 'noscript', 'object', 'output', 'progress', 'q', 'ruby', 'samp', 'script', 'select', 'small', 'span', 'strong', 'sub', 'sup', 'svg', 'textarea', 'time', 'var', 'video', 'wbr']
 
 wysiwyg.setAttribute('contenteditable', 'true');
 wysiwyg.setAttribute('spellcheck', 'true');
@@ -15,22 +19,104 @@ textarea.addEventListener("input", function(){
     wysiwyg.innerHTML = textarea.value
 })
 
-wysiwyg.addEventListener("keyup", function(){
-    textarea.value = wysiwyg.innerHTML
-})
-
 form.addEventListener("submit", function(evt){
     evt.preventDefault();
 })
 
+wysiwyg.addEventListener("paste", function(evt){
+    console.log(evt)
+
+    evt.preventDefault();
+})
+
+wysiwyg.addEventListener("drop", function(evt){
+    console.log(evt)
+
+    evt.preventDefault();
+})
+
+
+wysiwyg.addEventListener("contextmenu", function(evt){
+    console.log('context', evt)
+})
+
+wysiwyg.addEventListener("input", function(evt){
+    console.log('input', evt)
+})
+
+wysiwyg.addEventListener("keydown", function(evt){
+    console.log(evt)
+    textarea.value = wysiwyg.innerHTML
+})
 
 document.addEventListener("selectionchange", function() {
-    //let selected = getNodesInBetween(range.startContainer, range.endContainer, range.commonAncestorContainer);
-    //console.log(selected)
+    let range = getSelectionRange()
+    if(range)
+        createAction('selection', {
+            "inside-element": getSelectorForElement(range.commonAncestorContainer, wysiwyg),
+            "start-element": getSelectorForElement(range.startContainer, range.commonAncestorContainer), 
+            "start-node-index": getNodeIndex(range.startContainer), 
+            "start-offset": range.startOffset,
+            "end-element": getSelectorForElement(range.endContainer, range.commonAncestorContainer),
+            "end-node-index": getNodeIndex(range.endContainer),
+            "end-offset": range.endOffset
+        }, true)
+    else
+        createAction('selection', {
+            "inside-element": 'node',
+        }, true)
 });
 
 strong.addEventListener("click", addRemoveTagButton);
 italic.addEventListener("click", addRemoveTagButton);
+addCommentButton.addEventListener("click", addCommentary);
+toggleCommentButton.addEventListener("click", toggleCommentary);
+
+let commentsHidden;
+function toggleCommentary() {
+    commentsHidden ? commentsToCommentary() : commentaryToComments()
+    commentsHidden = !commentsHidden;
+}
+
+function commentsToCommentary(){
+    const commentWalker = document.createTreeWalker(wysiwyg, NodeFilter.SHOW_COMMENT)
+        , comments = [];
+    while(commentWalker.nextNode()) comments.push(commentWalker.currentNode);
+    comments.forEach(function(comment){
+        comment.parentNode.replaceChild(comment.data, comment)
+    })
+}
+
+function commentaryToComments(){
+    const quotes = wysiwyg.querySelectorAll('q')
+    quotes.forEach(function (quote){
+        quote.parentNode.replaceChild(document.createComment(quote.outerHTML), quote)
+    })
+}
+
+function createCommentaryArticle(id){
+    let commentArticle = document.createElement('article');
+    commentArticle.setAttribute('contenteditable', 'true');
+    commentArticle.setAttribute('spellcheck', 'true');
+    commentArticle.id = id;
+    return commentArticle;
+}
+
+function addCommentary(){
+    const range = getSelectionRange()
+        , id = 'comment0'
+    if(!range) return;
+    
+
+    commentsToQuotes();
+    const markers = getSetMarkers([
+        [range.endContainer, 'comment-end '+id, range.endOffset],
+        [range.startContainer, 'comment-start '+id, range.startOffset],
+    ].map(function(v){return {node:v[0], name:v[1], offset:v[2]}}));
+
+    console.log(markers)
+    markers[0].node.parentNode.insertBefore(createCommentArticle(id), markers[0].node)
+}
 
 function addRemoveTagButton(){
 
@@ -61,7 +147,6 @@ function addRemoveTagButton(){
                     endOffset = end.length;
                 }
             }
-            time.push(new Date());
 
             const markers = getSetMarkers([
                 [end, 'wrap-end', endOffset],
@@ -70,22 +155,23 @@ function addRemoveTagButton(){
                 [start,'wrap-start',startOffset]
             ].map(function(v){return {node:v[0], name:v[1], offset:v[2]}}));
 
-            time.push(new Date());
             removeAllTagsOfTypeBetween(value, markers['wrap-start'], markers['wrap-end']);
-            time.push(new Date());
             
             if(isRemove){ 
-                wrapContentBetweenWithTag(value, markers['wrap-start'], markers['selection-start'])
-                wrapContentBetweenWithTag(value, markers['selection-end'], markers['wrap-end']) 
+                wrapContentBetweenWithTag(value, markers['wrap-start'], markers['selection-start'], isPhrasing)
+                wrapContentBetweenWithTag(value, markers['selection-end'], markers['wrap-end'], isPhrasing) 
             }else 
-                wrapContentBetweenWithTag(value, markers['wrap-start'], markers['wrap-end']) 
+                wrapContentBetweenWithTag(value, markers['wrap-start'], markers['wrap-end'], isPhrasing) 
 
-            time.push(new Date());
             wysiwyg.querySelectorAll('.marker').forEach(function(marker){
                 marker.parentNode.removeChild(marker)
             })
+            console.log(range)
             
-            time.push(new Date());
+            createAction('wrapOrUnwrapSelection', {
+                "tag": value,
+                "is-remove":+isRemove
+            })
         }else 
             console.log(isNodeWrapped(range.startContainer, value) ? 'break tag' : 'add tag') 
     } 
@@ -94,8 +180,40 @@ function addRemoveTagButton(){
         console.log(i+": -"+(now - timeAt))
     })
 
-
 } 
+
+function getNodeIndex(node){
+    let i = 0;
+    while( (node = node.previousSibling) != null ) 
+        i++;
+
+    return i;
+}
+
+function createInput(name, type, value, disabled){
+    const input = document.createElement('input') 
+    input.type = type;
+    input.value = value;
+    input.name = name;
+    input.disabled = disabled;
+    return input;
+}
+
+function createAction(actionName, actionArgs, replaceSame){
+    const action = document.createElement('li') 
+    action.appendChild(createInput('action', 'text', actionName, true));
+
+    for(const key in actionArgs){
+        action.appendChild(createInput(key, 'text', actionArgs[key], true));
+    }
+
+    if(replaceSame && actionList.lastChild && actionList.lastChild.querySelector('input[name="action"]').value === actionName){
+        actionList.replaceChild(action, actionList.lastChild);
+    }else{
+        actionList.appendChild(action);
+    }
+
+}
 
 /**
  * @param array[i].node node
@@ -105,7 +223,8 @@ function addRemoveTagButton(){
 function getSetMarkers(array){ 
     let markers = {}
         , ii;
-    const toMark = array.filter(function(v, i, a){
+
+    array.filter(function(v, i, a){
         const markerRef = {name:v.name, offset:v.offset}
         let unique = true;
         v.markers = [markerRef]
@@ -141,25 +260,36 @@ function getSetMarkers(array){
     
     return markers; 
 } 
+function any(node){
+    return true;
+}
 
-function wrapContentBetweenWithTag(value, start, end){
+function isPhrasing(node){
+    return node.nodeType === 3 || phrasingContent.indexOf(node.localName.toLowerCase()) !== -1;
+}
+
+function wrapContentBetweenWithTag(value, start, end, wrapAllowed){
     let nodes = getNodesInBetween(start, end)
         , join = []
 
     while(nodes.length > 0){
         let node = nodes.shift()
-        join.push(node)
-        if(nodes.length > 0 && nodes[0] === node.nextSibling)
-            continue
-        else{
-            const wrap = document.createElement(value);
-            if(node.nextSibling) 
-                node.parentNode.insertBefore(wrap, node.nextSibling)
-            else
-                node.parentNode.appendChild(wrap)
+        if(wrapAllowed(node)){
+            join.push(node)
+            if(nodes.length > 0 && nodes[0] === node.nextSibling)
+                continue
+        }else
+            node.childNodes.forEach(function(v){nodes.push(v)})
+        
+        const wrap = document.createElement(value);
 
-            join.map(function(v){return wrap.appendChild(v)});
-        }
+        if(node.nextSibling) 
+            node.parentNode.insertBefore(wrap, node.nextSibling)
+        else
+            node.parentNode.appendChild(wrap)
+
+        join.map(function(v){return wrap.appendChild(v)});
+        join = [];
     }
 }
 
@@ -303,6 +433,7 @@ function getNodesInBetween(startNode, endNode, rootNode){
     }
     return fullSelectedNodes;
 }
+
 function removeWrappingNode(node){
     const parent = node.parentNode;
     if(parent){
@@ -327,9 +458,9 @@ function getTreeForNode(node, rootNode){
 }
 
 function getSelectorForElement(node, rootNode){
-    return getRichTreeForElement(node, rootNode).reduce(function(selector, node){
+    return node === rootNode ? "" : getRichTreeForElement(node, rootNode).reduce(function(selector, node){
         return selector + (selector && " > ") + node.localName + ":nth-of-type(" +(node.nthOfType||1) + ")"
-    },"");
+    }, "");
 }
 
 //get tree with the nth of type set, to be able to create a selector for the node;
